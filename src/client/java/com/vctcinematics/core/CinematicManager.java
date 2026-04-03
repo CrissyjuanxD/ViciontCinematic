@@ -24,6 +24,10 @@ public class CinematicManager {
     private static long cinematicStartTime;
     private static long cinematicEndTime;
 
+    // Variables de bucle
+    private static int currentLoopCount = 1;
+    private static boolean isInfinite = false;
+
     private static final long FADE_IN = 1400;
     private static final long FADE_STAY = 400;
     private static final long FADE_OUT = 1400;
@@ -31,7 +35,7 @@ public class CinematicManager {
     private static Perspective previousPerspective;
     private static boolean cameraRestored = false;
 
-    public static void play(String name, Interpolator.Type type, boolean useFade) {
+    public static void play(String name, Interpolator.Type type, boolean useFade, int loop) {
         activeCinematic = cinematics.get(name);
         if (activeCinematic == null || activeCinematic.keyframes.size() < 2) return;
 
@@ -39,6 +43,10 @@ public class CinematicManager {
         currentType = type;
         hasFade = useFade;
         cameraRestored = false;
+
+        // Si mandan 0 o 1, es 1 vuelta. Si es -1, es infinito.
+        currentLoopCount = (loop <= 0 && loop != -1) ? 1 : loop;
+        isInfinite = (currentLoopCount == -1);
 
         MinecraftClient client = MinecraftClient.getInstance();
         previousPerspective = client.options.getPerspective();
@@ -51,17 +59,26 @@ public class CinematicManager {
         } else {
             cinematicStartTime = now;
         }
-        cinematicEndTime = cinematicStartTime + totalDurationMs;
+
+        if (!isInfinite) {
+            cinematicEndTime = cinematicStartTime + (totalDurationMs * currentLoopCount);
+        } else {
+            cinematicEndTime = -1; // No se usará hasta que alguien lo detenga manual
+        }
+
         isPlaying = true;
     }
 
-    // MODIFICADO: Ahora exige el nombre para saber si debe detenerse
     public static void stop(String name) {
         if (!isPlaying || activeCinematic == null || !activeCinematic.name.equalsIgnoreCase(name)) return;
         long now = System.currentTimeMillis();
 
-        if (hasFade && now < cinematicEndTime - (FADE_IN + FADE_STAY)) {
-            cinematicEndTime = now + (FADE_IN + FADE_STAY);
+        if (hasFade) {
+            // Si es infinito o la interrumpimos a la mitad, forzamos el FadeOut AHORA MISMO
+            if (isInfinite || now < cinematicEndTime - (FADE_IN + FADE_STAY)) {
+                cinematicEndTime = now + (FADE_IN + FADE_STAY);
+                isInfinite = false; // Le quitamos lo infinito para que pueda morir
+            }
         } else {
             endCinematic();
         }
@@ -86,22 +103,16 @@ public class CinematicManager {
     public static void tick(MinecraftClient client) {
         long now = System.currentTimeMillis();
 
-        if (isPlaying) {
+        if (isPlaying && !isInfinite) {
             if (hasFade) {
-                if (now >= cinematicEndTime && !cameraRestored) {
-                    restoreCamera();
-                }
-                if (now >= cinematicEndTime + FADE_OUT) {
-                    endCinematic();
-                }
+                if (now >= cinematicEndTime && !cameraRestored) restoreCamera();
+                if (now >= cinematicEndTime + FADE_OUT) endCinematic();
             } else {
-                if (now >= cinematicEndTime) {
-                    endCinematic();
-                }
+                if (now >= cinematicEndTime) endCinematic();
             }
         }
 
-        // SISTEMA DE DEBUG VISUAL (Limpiado Bezier y Spline)
+        // SISTEMA DE DEBUG VISUAL
         if (debugCinematic != null && client.world != null) {
             for (Keyframe kf : debugCinematic.keyframes) {
                 if (Math.random() < 0.4) {
@@ -129,16 +140,33 @@ public class CinematicManager {
         if (!isPlaying || activeCinematic == null) return false;
         long now = System.currentTimeMillis();
         if (hasFade) {
+            if (isInfinite) return now >= fadeStartMs + FADE_IN;
             return now >= fadeStartMs + FADE_IN && now < cinematicEndTime;
         }
+        if (isInfinite) return now >= cinematicStartTime;
         return now >= cinematicStartTime && now <= cinematicEndTime;
     }
 
     public static Keyframe getCurrentCameraState() {
         long elapsed = System.currentTimeMillis() - cinematicStartTime;
         if (elapsed < 0) elapsed = 0;
-        if (elapsed > totalDurationMs) elapsed = totalDurationMs;
-        return Interpolator.getInterpolatedFrame(activeCinematic.keyframes, elapsed, currentType);
+
+        if (!isInfinite && elapsed > totalDurationMs * currentLoopCount) {
+            elapsed = totalDurationMs * currentLoopCount;
+        }
+
+        long loopElapsed;
+        if (totalDurationMs == 0) {
+            loopElapsed = 0;
+        } else {
+            loopElapsed = elapsed % totalDurationMs;
+            
+            if (!isInfinite && elapsed > 0 && elapsed == totalDurationMs * currentLoopCount) {
+                loopElapsed = totalDurationMs;
+            }
+        }
+
+        return Interpolator.getInterpolatedFrame(activeCinematic.keyframes, loopElapsed, currentType);
     }
 
     public static float getFadeAlpha() {
@@ -150,9 +178,12 @@ public class CinematicManager {
         if (now < cinematicStartTime) {
             long elapsedFade = now - fadeStartMs;
             return elapsedFade < FADE_IN ? (float) elapsedFade / FADE_IN : 1.0f;
-        } else if (now < cinematicStartTime + FADE_OUT) {
-            long elapsedClear = now - cinematicStartTime;
-            return 1.0f - ((float) elapsedClear / FADE_OUT);
+        }
+
+        if (isInfinite) return 0.0f;
+
+        if (now < cinematicEndTime - (FADE_IN + FADE_STAY)) {
+            return 0.0f;
         } else if (now > cinematicEndTime - (FADE_IN + FADE_STAY) && now <= cinematicEndTime - FADE_STAY) {
             long elapsedEndFade = now - (cinematicEndTime - (FADE_IN + FADE_STAY));
             return (float) elapsedEndFade / FADE_IN;

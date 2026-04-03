@@ -39,7 +39,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 				switch (payload.action()) {
 					case 0: // PLAY
 						Interpolator.Type playType = payload.type().equals("LINEAR") ? Interpolator.Type.LINEAR : Interpolator.Type.SMOOTH;
-						CinematicManager.play(name, playType, payload.hasFade());
+						CinematicManager.play(name, playType, payload.hasFade(), payload.loopCount());
 						break;
 					case 1: // STOP
 						CinematicManager.stop(name);
@@ -54,7 +54,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 							cine.addOrUpdateKeyframe(new Keyframe(payload.index(), payload.x(), payload.y(), payload.z(), payload.yaw(), payload.pitch(), tType, payload.timeMs()));
 						}
 						break;
-					case 4: // TOGGLE DEBUG
+					case 4: // TOGGLE DEBUG DESDE EL PLUGIN
 						toggleDebugLogic(name, payload.type());
 						break;
 				}
@@ -68,6 +68,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 		SuggestionProvider<FabricClientCommandSource> DEBUG_MODES = (context, builder) -> CommandSource.suggestMatching(Arrays.asList("normal", "smooth", "linear"), builder);
 
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+
 			dispatcher.register(ClientCommandManager.literal("vctcinema")
 					.then(ClientCommandManager.literal("crear")
 							.then(ClientCommandManager.argument("nombre", StringArgumentType.word())
@@ -88,9 +89,11 @@ public class ViciontCinematicClient implements ClientModInitializer {
 											context.getSource().sendFeedback(Text.literal("§cLa cinemática no existe."));
 											return 1;
 										}
+
 										float totalSec = cine.getTotalDuration() / 1000.0f;
 										context.getSource().sendFeedback(Text.literal("§6=== Cinemática: §e" + name + " §6==="));
 										context.getSource().sendFeedback(Text.literal("§7Duración total: §f" + cine.getTotalDuration() + "ms (" + String.format("%.1f", totalSec) + "s)"));
+
 										for (Keyframe kf : cine.keyframes) {
 											float kfSec = kf.timeMs / 1000.0f;
 											context.getSource().sendFeedback(Text.literal("§8- §aKF " + kf.index + " §7| Tipo: §b" + kf.transition.name() + " §7| Tiempo: §e" + kf.timeMs + "ms (" + String.format("%.1f", kfSec) + "s)"));
@@ -110,15 +113,19 @@ public class ViciontCinematicClient implements ClientModInitializer {
 																		int num = IntegerArgumentType.getInteger(context, "numero");
 																		String tipo = StringArgumentType.getString(context, "tipo").toUpperCase();
 																		long time = LongArgumentType.getLong(context, "tiempo");
+
 																		Cinematic cine = CinematicManager.cinematics.get(name);
 																		if (cine == null) {
 																			context.getSource().sendFeedback(Text.literal("§cLa cinemática no existe."));
 																			return 1;
 																		}
+
 																		PlayerEntity player = MinecraftClient.getInstance().player;
 																		TransitionType tType = tipo.equals("CUT") ? TransitionType.CUT : TransitionType.NORMAL;
+
 																		Keyframe kf = new Keyframe(num, player.getX(), player.getY() + player.getStandingEyeHeight(), player.getZ(), player.getYaw(), player.getPitch(), tType, time);
 																		cine.addOrUpdateKeyframe(kf);
+
 																		context.getSource().sendFeedback(Text.literal("§aKeyframe " + num + " añadido a '" + name + "'."));
 																		return 1;
 																	})
@@ -135,6 +142,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 																		int num = IntegerArgumentType.getInteger(context, "numero");
 																		String tipo = StringArgumentType.getString(context, "tipo").toUpperCase();
 																		long time = LongArgumentType.getLong(context, "tiempo");
+
 																		Cinematic cine = CinematicManager.cinematics.get(name);
 																		if (cine != null) {
 																			TransitionType tType = tipo.equals("CUT") ? TransitionType.CUT : TransitionType.NORMAL;
@@ -156,6 +164,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 														String name = StringArgumentType.getString(context, "nombre");
 														int num = IntegerArgumentType.getInteger(context, "numero");
 														Cinematic cine = CinematicManager.cinematics.get(name);
+
 														if (cine != null && cine.removeKeyframe(num)) {
 															context.getSource().sendFeedback(Text.literal("§aKeyframe " + num + " eliminado."));
 														} else {
@@ -167,24 +176,23 @@ public class ViciontCinematicClient implements ClientModInitializer {
 									)
 							)
 					)
+
+					// COMANDO PLAY CON OPCIÓN [LOOP]
 					.then(ClientCommandManager.literal("play")
 							.then(ClientCommandManager.argument("nombre", StringArgumentType.word()).suggests(CINEMATICS_SUGGESTIONS)
 									.then(ClientCommandManager.argument("tipo", StringArgumentType.word()).suggests(PLAY_TYPE_SUGGESTIONS)
 											.then(ClientCommandManager.argument("fade", StringArgumentType.word()).suggests(FADE_SUGGESTIONS)
-													.executes(context -> {
-														String name = StringArgumentType.getString(context, "nombre");
-														String tipo = StringArgumentType.getString(context, "tipo").toUpperCase();
-														boolean hasFade = StringArgumentType.getString(context, "fade").equalsIgnoreCase("fadeon");
-														Interpolator.Type iType = Interpolator.Type.SMOOTH;
-														if (tipo.equals("LINEAR")) iType = Interpolator.Type.LINEAR;
-														CinematicManager.play(name, iType, hasFade);
-														context.getSource().sendFeedback(Text.literal("§6Reproduciendo '" + name + "'..."));
-														return 1;
-													})
+													// Variante 1: Sin Loop (por defecto 1)
+													.executes(context -> executeLocalPlay(context, 1))
+													// Variante 2: Con loop
+													.then(ClientCommandManager.argument("loop", IntegerArgumentType.integer())
+															.executes(context -> executeLocalPlay(context, IntegerArgumentType.getInteger(context, "loop")))
+													)
 											)
 									)
 							)
 					)
+
 					.then(ClientCommandManager.literal("stop")
 							.then(ClientCommandManager.argument("nombre", StringArgumentType.word()).suggests(CINEMATICS_SUGGESTIONS)
 									.executes(context -> {
@@ -195,6 +203,7 @@ public class ViciontCinematicClient implements ClientModInitializer {
 									})
 							)
 					)
+
 					.then(ClientCommandManager.literal("debug")
 							.then(ClientCommandManager.argument("nombre", StringArgumentType.word()).suggests(CINEMATICS_SUGGESTIONS)
 									.executes(context -> toggleDebugLocal(context, StringArgumentType.getString(context, "nombre"), "normal"))
@@ -207,8 +216,20 @@ public class ViciontCinematicClient implements ClientModInitializer {
 		});
 	}
 
+	private static int executeLocalPlay(CommandContext<FabricClientCommandSource> context, int loop) {
+		String name = StringArgumentType.getString(context, "nombre");
+		String tipo = StringArgumentType.getString(context, "tipo").toUpperCase();
+		boolean hasFade = StringArgumentType.getString(context, "fade").equalsIgnoreCase("fadeon");
+
+		Interpolator.Type iType = Interpolator.Type.SMOOTH;
+		if (tipo.equals("LINEAR")) iType = Interpolator.Type.LINEAR;
+
+		CinematicManager.play(name, iType, hasFade, loop);
+		context.getSource().sendFeedback(Text.literal("§6Reproduciendo '" + name + "' (Bucle: " + loop + ")..."));
+		return 1;
+	}
+
 	public static void toggleDebugLogic(String name, String modeStr) {
-		// --- NUEVO: Apagado forzoso ---
 		if (name.equalsIgnoreCase("off")) {
 			CinematicManager.debugCinematic = null;
 			CinematicManager.debugLineType = null;
@@ -222,7 +243,6 @@ public class ViciontCinematicClient implements ClientModInitializer {
 		if (modeStr.equalsIgnoreCase("smooth")) desiredLineType = Interpolator.Type.SMOOTH;
 		if (modeStr.equalsIgnoreCase("linear")) desiredLineType = Interpolator.Type.LINEAR;
 
-		// Si se pide exactamente lo que ya está, se apaga. Si no, se cambia.
 		if (CinematicManager.debugCinematic == cine && CinematicManager.debugLineType == desiredLineType) {
 			CinematicManager.debugCinematic = null;
 			CinematicManager.debugLineType = null;
@@ -232,7 +252,6 @@ public class ViciontCinematicClient implements ClientModInitializer {
 		}
 	}
 
-	// Comando local del cliente que usa la misma lógica pero envía textos al chat
 	private static int toggleDebugLocal(CommandContext<FabricClientCommandSource> context, String name, String modeStr) {
 		if (name.equalsIgnoreCase("off")) {
 			toggleDebugLogic("off", modeStr);
