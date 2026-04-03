@@ -1,0 +1,19 @@
+{
+	"required": true,
+	"package": "com.vctcinematics.mixin.client",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"CameraMixin",
+		"ChatHudMixin",
+		"GameRendererMixin",
+		"InGameHudMixin",
+		"MinecraftClientMixin",
+		"WorldRendererMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}
