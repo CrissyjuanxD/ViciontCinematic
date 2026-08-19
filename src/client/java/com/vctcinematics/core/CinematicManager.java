@@ -116,7 +116,7 @@ public class CinematicManager {
         if (debugCinematic != null && client.world != null) {
             for (Keyframe kf : debugCinematic.keyframes) {
                 if (Math.random() < 0.4) {
-                    client.world.addParticle(kf.x, kf.y, kf.z, 0, 0.01, ParticleTypes.END_ROD);
+                    client.world.addParticleClient(ParticleTypes.END_ROD, kf.x, kf.y, kf.z, 0, 0.01, 0);
                 }
             }
 
@@ -128,7 +128,7 @@ public class CinematicManager {
                         if (Math.random() < 0.1) {
                             Keyframe curr = Interpolator.getInterpolatedFrame(debugCinematic.keyframes, time, debugLineType);
                             ParticleEffect p = (debugLineType == Interpolator.Type.SMOOTH) ? ParticleTypes.FLAME : ParticleTypes.SOUL_FIRE_FLAME;
-                            client.world.addParticle(curr.x, curr.y, curr.z, 0, 0, p);
+                            client.world.addParticleClient(p, curr.x, curr.y, curr.z, 0, 0, 0);
                         }
                     }
                 }
