@@ -18,12 +18,9 @@ public class InGameHudMixin {
         if (CinematicManager.isPlaying) {
             float alpha = CinematicManager.getFadeAlpha();
             if (alpha > 0.0f) {
-                com.mojang.blaze3d.systems.RenderSystem.enableBlend();
-                com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
                 int color = ((int) (alpha * 255.0f) << 24) | 0x000000;
                 MinecraftClient client = MinecraftClient.getInstance();
                 context.fill(0, 0, client.getWindow().getScaledWidth(), client.getWindow().getScaledHeight(), color);
-                com.mojang.blaze3d.systems.RenderSystem.disableBlend();
             }
         }
     }
