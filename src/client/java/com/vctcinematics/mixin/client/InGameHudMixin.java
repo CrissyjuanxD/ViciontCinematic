@@ -13,7 +13,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(InGameHud.class)
 public class InGameHudMixin {
 
-    // 1. Renderizar el FADE al final de todo el HUD (Aquí sí necesitamos los parámetros para dibujar)
     @Inject(method = "render", at = @At("TAIL"))
     private void renderCinematicFade(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         if (CinematicManager.isPlaying) {
@@ -29,31 +28,28 @@ public class InGameHudMixin {
         }
     }
 
-    // 2. Ocultar partes del HUD individualmente con la técnica segura (CallbackInfo)
-
     @Inject(method = "renderHotbar", at = @At("HEAD"), cancellable = true, require = 0)
-    private void hideHotbar(CallbackInfo ci) {
+    private void hideHotbar(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         if (CinematicManager.isPlaying) ci.cancel();
     }
 
     @Inject(method = "renderCrosshair", at = @At("HEAD"), cancellable = true, require = 0)
-    private void hideCrosshair(CallbackInfo ci) {
+    private void hideCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         if (CinematicManager.isPlaying) ci.cancel();
     }
 
-    @Inject(method = "renderExperienceBar", at = @At("HEAD"), cancellable = true, require = 0)
-    private void hideExpBar(CallbackInfo ci) {
-        if (CinematicManager.isPlaying) ci.cancel();
-    }
-
-    // renderStatusBars engloba vida, armadura, burbujas de aire y comida.
     @Inject(method = "renderStatusBars", at = @At("HEAD"), cancellable = true, require = 0)
-    private void hideStatusBars(CallbackInfo ci) {
+    private void hideStatusBars(DrawContext context, CallbackInfo ci) {
         if (CinematicManager.isPlaying) ci.cancel();
     }
 
     @Inject(method = "renderStatusEffectOverlay", at = @At("HEAD"), cancellable = true, require = 0)
-    private void hideEffectOverlay(CallbackInfo ci) {
+    private void hideEffectOverlay(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+        if (CinematicManager.isPlaying) ci.cancel();
+    }
+
+    @Inject(method = "renderMainHud", at = @At("HEAD"), cancellable = true, require = 0)
+    private void hideMainHud(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
         if (CinematicManager.isPlaying) ci.cancel();
     }
 }
